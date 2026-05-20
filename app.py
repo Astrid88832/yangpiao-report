@@ -14,7 +14,7 @@ st.title("📊 离岸央票市场简报自动化生成系统")
 uploaded_file = st.file_uploader("请上传每日的 'Yangpiao data.xlsx' (CSV格式)", type=["csv"])
 
 if uploaded_file:
-    df = pd.read_csv(uploaded_file)
+    df = pd.read_csv(uploaded_file,encoding='gbk')
     st.success("数据读取成功！")
     
     if st.button("🚀 生成今日简报"):
