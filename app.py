@@ -4,36 +4,53 @@ from docx import Document
 import google.generativeai as genai
 from io import BytesIO
 
-# 1. 设置 API (请替换成你在 Google AI Studio 获取的 Key)
-genai.configure(api_key="在此处粘贴你的API_KEY")
-model = genai.GenerativeModel('gemini-1.5-flash')
+import streamlit as st
+import pandas as pd
 
-st.set_page_config(page_title="央票报告生成器", layout="wide")
-st.title("📊 离岸央票市场简报自动化生成系统")
+# 页面基础设置
+st.set_page_config(page_title="央票数据提炼助手", page_icon="📈")
+st.title("📈 央票数据提炼与报告助手")
+st.write("请上传您的 CSV 数据文件，我们将为您生成投喂给 QClaw 的指令。")
 
-uploaded_file = st.file_uploader("请上传每日的 'Yangpiao data.xlsx' (CSV格式)", type=["csv"])
+# 文件上传组件
+uploaded_file = st.file_uploader("选择一个 CSV 文件", type=["csv"])
 
-if uploaded_file:
-    df = pd.read_csv(uploaded_file,encoding='gbk')
-    st.success("数据读取成功！")
-    
-    if st.button("🚀 生成今日简报"):
-        # 提取关键数据用于 AI 分析
-        # 对应你 Excel 第一段的数据：美债、美元指数、USD/CNH
-        us_rate = df.iloc[3, 2] 
-        usd_cnh = df.iloc[7, 2]
+if uploaded_file is not None:
+    # 1. 读取 Excel/CSV 数据
+    try:
+        df = pd.read_csv(uploaded_file)
+        st.success("数据读取成功！")
         
-        analysis_prompt = f"请作为金融分析师，基于以下关键数据撰写一份《离岸央票市场简报》的“市场概况”段落。数据：10年美债收益率{us_rate}%, USD/CNH为{usd_cnh}。要求专业、简洁。"
+        # 显示数据概览
+        st.write("### 数据概览：")
+        st.dataframe(df.head())
         
-        with st.spinner('AI 正在撰写报告...'):
-            report_text = model.generate_content(analysis_prompt).text
+        # 2. 自动提炼核心内容（将数据转化为纯文本）
+        # 这里使用 df.to_string() 确保所有数值都能被 AI 识别
+        data_string = df.to_string(index=False)
         
-        # 填充到 Word
-        doc = Document()
-        doc.add_heading('离岸央票市场简报', 0)
-        doc.add_paragraph(report_text)
+        # 3. 生成投喂指令 (QClaw 专用提示词)
+        prompt_for_qclaw = f"""
+请扮演金融分析师，根据以下央票市场数据撰写一份专业简报：
+
+【市场数据】
+{data_string}
+
+【撰写要求】
+1. 分析市场趋势（如利率变动、流动性情况）。
+2. 用专业的金融术语总结核心结论。
+3. 如果数据中有异常波动，请特别指出。
+4. 语言简洁，结构清晰，适合在内部工作群中发布。
+"""
         
-        buffer = BytesIO()
-        doc.save(buffer)
+        # 4. UI 展示与复制功能
+        st.subheader("💡 复制以下指令投喂给 QClaw：")
+        st.text_area("直接复制下面的内容：", value=prompt_for_qclaw, height=400)
         
-        st.download_button("📥 下载 Word 报告", data=buffer.getvalue(), file_name="离岸央票市场简报.docx")
+        st.info("提示：请全选上方文本框内容，点击右键复制，然后粘贴到 QClaw 对话窗口中即可生成报告。")
+
+    except Exception as e:
+        st.error(f"读取文件时出错：{e}")
+        st.write("请检查 CSV 文件格式是否正确。")
+else:
+    st.warning("请上传数据文件以开始工作。")
