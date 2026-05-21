@@ -11,12 +11,14 @@ if uploaded_file:
     df = pd.read_csv(uploaded_file, encoding='gbk', header=None)
     
     try:
-        # --- 1. 日期与周几自动换算 ---
-        # 获取当前系统时间，或者您可以手动指定日期
-        today = datetime.now() 
-        date_str = today.strftime("%Y年%m月%d日")
+        # --- 1. 日期与周几自动换算 (修改逻辑：自动回溯 1 天) ---
+        # 获取当前时间并减去 1 天
+        yesterday = datetime.now() - timedelta(days=1)
+        date_str = yesterday.strftime("%Y年%m月%d日")
+        
+        # 映射表保持不变
         weekday_map = {0:"周一", 1:"周二", 2:"周三", 3:"周四", 4:"周五", 5:"周六", 6:"周日"}
-        weekday_str = weekday_map[today.weekday()]
+        weekday_str = weekday_map[yesterday.weekday()]
         
         # 假设前一天是工作日，用于描述“昨晚”
         prev_day_str = "前一交易日" 
