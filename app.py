@@ -5,35 +5,43 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="央票自动化工具", page_icon="🏦")
 st.title("🏦 央票自动化工具")
 
+# 1. 文件上传
 uploaded_file = st.file_uploader("请上传 Yangpiao data.csv 文件", type=["csv"])
-econ_news = st.text_area("请输入今晚的经济数据简述:", value="周五晚间无重要经济数据公布")
+
+# 2. 经济数据输入框
+econ_news = st.text_area("请输入今晚的经济数据简述 (如：周五晚间美国公布了非农就业数据，表现平稳):", 
+                         value="周五晚间无重要经济数据公布")
 
 if uploaded_file:
     # 读入 CSV，header=None
     df = pd.read_csv(uploaded_file, encoding='gbk', header=None)
     
     try:
-        # --- 1. 日期逻辑 ---
+        # --- 1. 日期逻辑：自动回溯 1 天 ---
         yesterday = datetime.now() - timedelta(days=1)
         date_str = yesterday.strftime("%Y年%m月%d日")
         weekday_map = {0:"周一", 1:"周二", 2:"周三", 3:"周四", 4:"周五", 5:"周六", 6:"周日"}
         weekday_str = weekday_map[yesterday.weekday()]
 
-        # --- 2. 精准坐标定位并强制转换为 float ---
+        # --- 2. 精准坐标定位 ---
+        # 10Y UST (根据实际 CSV 行定位)
         row_10y = df[df[1] == "10Y UST"].index[0]
         ten_year_yield = float(df.iat[row_10y, 2])
         ten_year_bps = float(df.iat[row_10y, 3])
         
+        # DXY (根据实际 CSV 行定位)
         row_dxy = df[df[1] == "DXY"].index[0]
         ny_usd_close = float(df.iat[row_dxy, 2])
         asia_usd_close = float(df.iat[row_dxy, 3])
-        ysd_usd_close = float(df.iat[row_dxy, 4]) # 确认您的 CSV 第5列是 Ysd lvl
+        ysd_usd_close = float(df.iat[row_dxy, 4])
         
+        # USD/CNH
         row_cnh = df[df[1] == "USD/CNH"].index[0]
         cnh_asia_close = float(df.iat[row_cnh, 2])
 
-        # --- 3. 走势逻辑计算 (现在数据已是 float，可以进行减法了) ---
+        # --- 3. 走势逻辑自动计算 ---
         trend_word = "上行" if ten_year_bps > 0 else "下行"
+        abs_bps = abs(ten_year_bps)
         
         ny_diff = ny_usd_close - ysd_usd_close
         if ny_diff > 0.05: ny_trend = "震荡上行"
@@ -45,12 +53,12 @@ if uploaded_file:
         elif asia_diff < -0.02: asia_trend = "转跌"
         else: asia_trend = "变化不大"
 
-        # --- 4. 报告生成 ---
-        ### 离岸央票市场简报 {date_str}
+        # --- 4. 报告生成 (已精简第一段) ---
+        report = f"""
+### 离岸央票市场简报 {date_str}
 
-{weekday_str}晚间{econ_news}，美债收益率曲线在纽约时段整体{trend_word}。
-
-其中10年期美债收益率较上一交易日{ten_year_bps} bps {trend_word}，收于{ten_year_yield}%。
+**第一段：市场概览**
+{weekday_str}晚间{econ_news}。美债收益率曲线在纽约时段整体{trend_word}，10年期美债收益率较上一交易日{abs_bps} bps{trend_word}，收于{ten_year_yield}%。
 
 美元指数在纽约时段{ny_trend}，最终收于{ny_usd_close}附近。
 
