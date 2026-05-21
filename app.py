@@ -46,13 +46,11 @@ if uploaded_file:
         else: asia_trend = "变化不大"
 
         # --- 4. 报告生成 ---
-        report = f"""
-### 离岸央票市场简报 {date_str}
+        ### 离岸央票市场简报 {date_str}
 
-**第一段：市场概览**
-{weekday_str}晚间{econ_news}，中东局势继续紧张引发通胀担忧再起，叠加日债欧债抛售潮带动美债共振走弱，美债收益率曲线在纽约时段整体{trend_word}。
+{weekday_str}晚间{econ_news}，美债收益率曲线在纽约时段整体{trend_word}。
 
-其中10年期美债收益率较上一交易日{ten_year_bps} bps，收于{ten_year_yield}%。
+其中10年期美债收益率较上一交易日{ten_year_bps} bps {trend_word}，收于{ten_year_yield}%。
 
 美元指数在纽约时段{ny_trend}，最终收于{ny_usd_close}附近。
 
