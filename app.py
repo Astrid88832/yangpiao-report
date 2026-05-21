@@ -2,51 +2,52 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="央票自动化工具", layout="wide")
-st.title("🏦 央票自动化工具")
+st.set_page_config(page_title="央票自动化调试工具", layout="wide")
+st.title("🏦 央票自动化工具 (调试模式)")
 
-uploaded_file = st.file_uploader("请上传 Yangpiao data.csv 文件", type=["csv"])
+uploaded_file = st.file_uploader("请上传 CSV", type=["csv"])
+
 if uploaded_file:
-    # 1. 鲁棒的读取逻辑
-    encodings = ['utf-8-sig', 'gbk', 'gb18030']
-    df = None
-    for enc in encodings:
-        try:
-            uploaded_file.seek(0)
-            df = pd.read_csv(uploaded_file, encoding=enc, header=None)
-            break
-        except: continue
+    # 1. 编码检测与读取
+    try:
+        df = pd.read_csv(uploaded_file, encoding='utf-8-sig', header=None)
+    except:
+        df = pd.read_csv(uploaded_file, encoding='gbk', header=None)
+    
+    st.write("--- 调试信息: 文件前 5 行 ---")
+    st.write(df.head(5))
 
-    if df is not None:
-        try:
-            # 2. 定位 Repo 表并生成报告
-            repo_idx = df[df[0] == "Repo"].index[0]
-            repo_df = df.iloc[repo_idx+2 : repo_idx+9].copy()
-            repo_df.columns = ["期限", "开盘买", "开盘卖", "变动", "收盘买", "收盘卖"]
+    try:
+        # 2. 定位 Repo 行 (带哨兵检查)
+        repo_mask = df[0].astype(str).str.contains("Repo", na=False)
+        if not repo_mask.any():
+            st.error("❌ 错误：在第一列中找不到 'Repo' 标签！")
+            st.stop()
+        
+        repo_idx = df.index[repo_mask][0]
+        st.write(f"✅ 成功定位 Repo 行: 第 {repo_idx} 行")
+
+        # 3. 读取 Repo 数据区域
+        # 根据 snippet，数据从 repo_idx+2 开始
+        repo_df = df.iloc[repo_idx+2 : repo_idx+9].copy()
+        
+        # ⚠️ 关键检查：看看数据是否正确加载
+        if repo_df.empty:
+            st.error("❌ 错误：Repo 数据区为空，请检查行偏移量是否正确！")
+            st.stop()
             
-            # Markdown 表格生成
-            table_md = "| 期限 | 开盘买价(%) | 开盘卖价(%) | 变动(bps) | 收盘买价(%) | 收盘卖价(%) |\n|---|---|---|---|---|---|\n"
-            for _, row in repo_df.iterrows():
-                table_md += f"| {row['期限']} | {row['开盘买']} | {row['开盘卖']} | {row['变动']} | {row['收盘买']} | {row['收盘卖']} |\n"
+        repo_df.columns = ["期限", "开盘买", "开盘卖", "变动", "收盘买", "收盘卖"]
+        st.write("--- 调试信息: 读取到的 Repo 表 ---")
+        st.write(repo_df)
 
-            # 报告拼接
-            report = f"""
-### 离岸央票市场简报 {datetime.now().strftime("%Y年%m月%d日")}
+        # 4. 逻辑计算
+        repo_df["变动"] = pd.to_numeric(repo_df["变动"], errors='coerce').fillna(0)
+        avg_change = repo_df["变动"].mean()
+        
+        # ... (后续生成报告逻辑) ...
+        st.success("🎉 数据处理逻辑运行正常！")
 
-**第一段：市场概览**
-(此处补充你的概览逻辑)
-
-**第二段：货币市场流动性**
-(此处补充你的流动性逻辑)
-
-**第三部分：香港离岸人民币回购市场**
-人民币回购市场方面... (保持你之前的文案)
-
-{table_md}
-"""
-            st.markdown(report)
-            st.download_button("下载报告", report, file_name="央票简报.md")
-        except Exception as e:
-            st.error(f"处理数据失败: {e}")
-    else:
-        st.error("无法识别文件编码。")
+    except Exception as e:
+        # 打印出完整的报错信息，方便排查
+        st.error(f"❌ 程序逻辑崩溃，错误详情如下：")
+        st.exception(e)
