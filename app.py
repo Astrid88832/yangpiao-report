@@ -9,8 +9,7 @@ st.title("🏦 央票自动化工具")
 uploaded_file = st.file_uploader("请上传 Yangpiao data.csv 文件", type=["csv"])
 
 # 2. 经济数据输入框
-econ_news = st.text_area("请输入今晚的经济数据简述 (如：周五晚间无重要经济数据公布):", 
-                         value="周五晚间无重要经济数据公布")
+econ_news = st.text_area("请输入今晚的经济数据简述:", value="周五晚间无重要经济数据公布")
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file, encoding='gbk', header=None)
@@ -22,7 +21,14 @@ if uploaded_file:
         weekday_map = {0:"周一", 1:"周二", 2:"周三", 3:"周四", 4:"周五", 5:"周六", 6:"周日"}
         weekday_str = weekday_map[yesterday.weekday()]
 
-        # --- 2. 第一段数据定位 ---
+        # --- 2. 辅助函数：精准安全定位 ---
+        def get_rate_data_safe(term_name, start_from=0):
+            # 在指定行之后搜索
+            subset = df.iloc[start_from:]
+            row_idx = subset[subset[1] == term_name].index[0]
+            return float(df.iat[row_idx, 2]), float(df.iat[row_idx, 3])
+
+        # --- 3. 第一段数据 ---
         row_10y = df[df[1] == "10Y UST"].index[0]
         ten_year_yield = float(df.iat[row_10y, 2])
         ten_year_bps = float(df.iat[row_10y, 3])
@@ -35,43 +41,29 @@ if uploaded_file:
         row_cnh = df[df[1] == "USD/CNH"].index[0]
         cnh_asia_close = float(df.iat[row_cnh, 2])
 
-        # --- 3. 第二段数据定位与逻辑 ---
+        # --- 4. 第二段数据 (安全定位) ---
         start_row = df[df[1] == "Implied yield table"].index[0]
         
-        # 资金利率基调逻辑
-        changes = []
-        for i in range(start_row + 2, start_row + 10):
-            try: changes.append(float(df.iat[i, 3]))
-            except: break
-        if all(c > 0 for c in changes): liquidity_status = "收紧"
-        elif all(c < 0 for c in changes): liquidity_status = "转松"
-        else: liquidity_status = "变化不大"
-        
-        # O/N 和 T/N 通用数据抓取
-        def get_rate_data(term_name):
-            row = df[df[1] == term_name].index[1] # 获取表格区域内的行
-            return float(df.iat[row, 2]), float(df.iat[row, 3])
+        # 获取基础数据
+        cnhon_open, cnhon_close = get_rate_data_safe("CNHON")
+        tn_open, tn_close = get_rate_data_safe("CNHTN")
+        on_rate, on_change = get_rate_data_safe("O/N", start_row)
+        tn_rate, tn_change = get_rate_data_safe("T/N", start_row)
+        one_year_rate, one_year_change = get_rate_data_safe("1Y", start_row)
 
-        cnhon_open, cnhon_close = get_rate_data("O/N") # 这里取O/N的Asia Open/Close
-        tn_open, tn_close = get_rate_data("T/N")
+        # 整体流动性基调
+        changes = [float(df.iat[i, 3]) for i in range(start_row + 2, start_row + 10) if pd.notna(df.iat[i, 3])]
+        liquidity_status = "收紧" if all(c > 0 for c in changes) else ("转松" if all(c < 0 for c in changes) else "变化不大")
         
-        on_rate, on_change = get_rate_data("O/N")
-        tn_rate, tn_change = get_rate_data("T/N")
-        
-        # 其余期限概括 (1W-1Y)
-        other_changes = [float(df.iat[i, 3]) for i in range(start_row + 4, start_row + 10)]
-        if all(abs(c) <= 5 for c in other_changes): others_trend = "窄幅波动于 5bps 以内"
-        elif all(c > 0 for c in other_changes): others_trend = "均上行"
-        else: others_trend = "均下行"
-        
-        one_year_rate, one_year_change = get_rate_data("1Y")
+        # 其余期限概括
+        other_changes = [float(df.iat[i, 3]) for i in range(start_row + 4, start_row + 10) if pd.notna(df.iat[i, 3])]
+        others_trend = "窄幅波动于 5bps 以内" if all(abs(c) <= 5 for c in other_changes) else ("均上行" if all(c > 0 for c in other_changes) else "均下行")
 
-        # --- 4. 走势判断逻辑 ---
+        # --- 5. 逻辑生成报告 ---
         trend_word = "上行" if ten_year_bps > 0 else "下行"
         ny_trend = "震荡上行" if (ny_usd_close - ysd_usd_close) > 0.05 else ("震荡下行" if (ny_usd_close - ysd_usd_close) < -0.05 else "窄幅波动")
         asia_trend = "延续了上行" if (asia_usd_close - ny_usd_close) > 0.02 else ("转跌" if (asia_usd_close - ny_usd_close) < -0.02 else "变化不大")
 
-        # --- 5. 报告生成 ---
         report = f"""
 ### 离岸央票市场简报 {date_str}
 
@@ -94,4 +86,4 @@ T/N掉期早盘于{tn_open}附近位置开盘，日内走势为{"震荡上行" i
         st.download_button("下载报告", report, file_name=f"央票简报_{yesterday.strftime('%Y%m%d')}.md")
         
     except Exception as e:
-        st.error(f"坐标读取出错，请检查 CSV 格式。错误详情: {e}")
+        st.error(f"坐标定位出错，请确保 CSV 中包含所有必要标签。错误详情: {e}")
