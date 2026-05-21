@@ -1,47 +1,65 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 
 st.set_page_config(page_title="央票自动化工具", layout="wide")
 st.title("🏦 央票自动化工具")
 
-uploaded_file = st.file_uploader("请上传 Yangpiao data.csv", type=["csv"])
+uploaded_file = st.file_uploader("请上传 Yangpiao data.csv 文件", type=["csv"])
+econ_news = st.text_area("请输入今晚的经济数据简述:", value="周五晚间无重要经济数据公布")
 
-if uploaded_file is not None:
-    # 强制重置指针并使用 gbk 编码读取
-    uploaded_file.seek(0)
-    try:
-        # 使用 gbk 编码读取，因为文件中包含中文
-        df = pd.read_csv(uploaded_file, encoding='gbk', header=None)
-        
-        # --- 数据处理 ---
-        # 根据你提供的文件结构，Repo 就在第一行，数据从第3行开始
-        repo_df = df.iloc[2:9].copy()
-        repo_df.columns = ["期限", "开盘买", "开盘卖", "变动", "收盘买", "收盘卖"]
-        
-        # 逻辑计算
-        repo_df["变动"] = pd.to_numeric(repo_df["变动"], errors='coerce').fillna(0)
-        avg_change = repo_df["变动"].mean()
-        repo_trend = f"{'上行' if avg_change >= 0 else '下行'}于 {abs(round(avg_change, 1))} bps"
-        
-        # 生成 Markdown 表格
-        table_md = "| 期限 | 开盘买价(%) | 开盘卖价(%) | 变动(bps) | 收盘买价(%) | 收盘卖价(%) |\n"
-        table_md += "| :--- | :--- | :--- | :--- | :--- | :--- |\n"
-        for _, row in repo_df.iterrows():
-            table_md += f"| {row['期限']} | {row['开盘买']} | {row['开盘卖']} | {row['变动']} | {row['收盘买']} | {row['收盘卖']} |\n"
+if uploaded_file:
+    # 编码自适应读取
+    df = None
+    for enc in ['utf-8-sig', 'gbk', 'gb18030']:
+        try:
+            uploaded_file.seek(0)
+            df = pd.read_csv(uploaded_file, encoding=enc, header=None)
+            break
+        except: continue
+    
+    if df is not None:
+        try:
+            # --- 1. 日期逻辑 ---
+            yesterday = datetime.now() - timedelta(days=1)
+            date_str = yesterday.strftime("%Y年%m月%d日")
+            weekday_map = {0:"周一", 1:"周二", 2:"周三", 3:"周四", 4:"周五", 5:"周六", 6:"周日"}
+            weekday_str = weekday_map[yesterday.weekday()]
+
+            # --- 2. 带有定位功能的查找函数 ---
+            def get_idx_with_check(keyword, section_name):
+                mask = df[0].astype(str).str.contains(keyword, case=False, na=False)
+                if not mask.any():
+                    raise ValueError(f"【{section_name}】未找到关键词 '{keyword}'，请检查 CSV 对应行！")
+                return df.index[mask][0]
+
+            # --- 第一部分：市场概览 (定位检查) ---
+            row_10y = get_idx_with_check("10Y UST", "市场概览-10Y")
+            ten_year_yield = float(df.iat[row_10y, 2])
+            ten_year_bps = float(df.iat[row_10y, 3])
             
-        # 生成报告
-        report = f"""
-### 离岸央票市场简报 {datetime.now().strftime("%Y年%m月%d日")}
+            # --- 第二部分：货币市场 (定位检查) ---
+            row_yield = get_idx_with_check("Implied yield table", "货币市场-Implied Yield")
+            yield_changes = pd.to_numeric(df.iloc[row_yield+2:row_yield+10, 3], errors='coerce')
+            liquidity_status = "收紧" if yield_changes.mean() > 0 else "变化不大"
 
-**第三部分：香港离岸人民币回购市场**
-人民币回购市场方面，今日开盘离岸人民币回购利率各期限与上一交易日开盘时相比{repo_trend}。今日日内离岸人民币资金整体小幅波动，今日我行有 [请填入] 亿离岸人民币回购成交。以下是比较活跃期限之我行开价及波幅：
+            # --- 3. 报告拼接 ---
+            trend_word = "上行" if ten_year_bps > 0 else "下行"
+            
+            report = f"""
+### 离岸央票市场简报 {date_str}
 
-{table_md}
+**第一段：市场概览**
+{weekday_str}晚间{econ_news}。美债收益率曲线在纽约时段整体{trend_word}，10年期美债收益率较上一交易日{trend_word}{abs(ten_year_bps)} bps，收于{ten_year_yield}%。
+
+**第二段：离岸人民币货币市场与流动性观测**
+今日离岸人民币资金利率整体{liquidity_status}。
 """
-        st.markdown(report)
-        st.download_button("下载报告", report, file_name="央票简报.md")
-        
-    except Exception as e:
-        st.error(f"处理数据出错: {e}")
-        st.write("如果依然报错，请确认该 CSV 文件是否直接从 Excel 导出（Excel 默认使用 GBK 编码）。")
+            st.markdown(report)
+            st.success("✅ 第一、二部分定位正常，逻辑运行良好。")
+            
+        except Exception as e:
+            st.error(f"❌ 运行报错: {e}")
+            st.write("提示：如果报错，请检查 CSV 文件中是否确实包含了上述关键字。")
+    else:
+        st.error("无法识别文件编码。")
