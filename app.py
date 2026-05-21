@@ -18,7 +18,7 @@ uploaded_file = st.file_uploader("选择一个 CSV 文件", type=["csv"])
 if uploaded_file is not None:
     # 1. 读取 Excel/CSV 数据
     try:
-        df = pd.read_csv(uploaded_file)
+        df = pd.read_csv(uploaded_file, encoding='gbk')
         st.success("数据读取成功！")
         
         # 显示数据概览
