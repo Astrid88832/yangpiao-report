@@ -79,7 +79,7 @@ if uploaded_file:
 
 T/N掉期早盘于{tn_open}附近位置开盘，日内走势为{"震荡上行" if tn_close > tn_open else "震荡下行"}，尾盘收于{tn_close}附近位置，隐含收益率{tn_rate}%，较上一交易日{"上行" if tn_change > 0 else "下行"}{abs(tn_change)} bps。
 
-其余期限均{others_trend}，其中一年期隐含掉期利率收于{one_year_rate}%附近位置，较上一交易日相比{"上行" if one_year_change > 0 else "下行"}{abs(one_year_change)} bps。
+其余期限{others_trend}，其中一年期隐含掉期利率收于{one_year_rate}%附近位置，较上一交易日相比{"上行" if one_year_change > 0 else "下行"}{abs(one_year_change)} bps。
 """
         st.subheader("✅ 生成报告内容：")
         st.markdown(report)
